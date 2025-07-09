@@ -1,0 +1,29 @@
+# BitBot - Minimal MVP Requirements
+
+# Audio Input/Output
+sounddevice>=0.4.6
+soundfile>=0.12.1
+numpy>=1.24.0
+
+# Speech-to-Text (STT)
+faster-whisper>=0.10.0
+torch>=2.0.0
+
+# Large Language Model Integration
+ollama>=0.1.7
+openai>=1.3.0
+httpx>=0.25.0
+
+# Text-to-Speech (Basic)
+pyttsx3>=2.90
+
+# Wake Word Detection
+pvporcupine>=3.0.0
+
+# Development & Utilities
+python-dotenv>=1.0.0
+loguru>=0.7.0
+pydantic>=2.4.0
+typer>=0.9.0
+psutil>=5.9.0
+aiofiles>=23.0.0

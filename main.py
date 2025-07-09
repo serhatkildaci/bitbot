@@ -58,6 +58,32 @@ def setup_logging(verbose: bool = False):
     )
 
 
+def setup_logging_quiet():
+    """Set up minimal logging for chat mode."""
+    logger.remove()  # Remove default handler
+    
+    # Only show ERROR level logs to keep chat clean
+    logger.add(
+        sys.stderr,
+        level="ERROR",
+        format="<red>{level}: {message}</red>",
+        colorize=True
+    )
+    
+    # Still log to file for debugging
+    log_dir = project_root / "logs"
+    log_dir.mkdir(exist_ok=True)
+    
+    logger.add(
+        log_dir / "bitbot.log",
+        level="DEBUG",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+        rotation="10 MB",
+        retention="7 days",
+        compression="gz"
+    )
+
+
 def load_environment():
     """Load environment variables from .env file."""
     env_file = project_root / ".env"
@@ -103,12 +129,18 @@ def validate_environment():
 async def run_bitbot(
     tier: Optional[HardwareTier] = None,
     verbose: bool = False,
+    debug: bool = False,
+    nowake: bool = False,
     validate_env: bool = True
 ):
     """Main BitBot execution function."""
     
-    # Set up logging
-    setup_logging(verbose)
+    # Set up logging (quieter for no-wake mode)
+    if nowake and not debug:
+        # In no-wake mode, suppress most logs for clean chat interface
+        setup_logging_quiet()
+    else:
+        setup_logging(verbose)
     
     # Load environment
     load_environment()
@@ -120,33 +152,46 @@ async def run_bitbot(
     
     # Create configuration
     config = BitBotConfig(tier=tier)
-    logger.info(f"BitBot Configuration: {config.get_config_summary()}")
+    if not (nowake and not debug):
+        logger.info(f"BitBot Configuration: {config.get_config_summary()}")
     
-    # Initialize BitBot core
-    core = BitBotCore(config)
+    # Initialize BitBot core with mode settings
+    core = BitBotCore(config, debug_mode=debug, nowake_mode=nowake)
     
     try:
-        logger.info("🚀 Starting BitBot initialization...")
+        if not (nowake and not debug):
+            logger.info("🚀 Starting BitBot initialization...")
         
         if not await core.initialize():
             logger.error("❌ BitBot initialization failed")
             return False
         
-        logger.info("✅ BitBot initialized successfully!")
-        logger.info("🎤 Starting BitBot assistant...")
+        if not (nowake and not debug):
+            logger.info("✅ BitBot initialized successfully!")
+            logger.info("🎤 Starting BitBot assistant...")
+        elif nowake:
+            # Clean startup for chat mode
+            print("🤖 BitBot Chat Mode")
+            print("================")
+            print("🎧 Listening...")
         
         # Run BitBot
         await core.run_forever()
         
     except KeyboardInterrupt:
-        logger.info("👋 BitBot shutdown requested")
+        if not (nowake and not debug):
+            logger.info("👋 BitBot shutdown requested")
+        else:
+            print("\n👋 Chat session ended")
     except Exception as e:
         logger.error(f"💥 BitBot error: {e}")
         return False
     finally:
-        logger.info("🧹 Cleaning up...")
+        if not (nowake and not debug):
+            logger.info("🧹 Cleaning up...")
         await core.cleanup()
-        logger.info("✨ BitBot shutdown complete")
+        if not (nowake and not debug):
+            logger.info("✨ BitBot shutdown complete")
     
     return True
 
@@ -170,6 +215,16 @@ def start(
         False,
         "--verbose", "-v",
         help="Enable verbose logging"
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug", "-d",
+        help="Enable debug mode with microphone input logging"
+    ),
+    nowake: bool = typer.Option(
+        False,
+        "--nowake",
+        help="Start directly in conversation mode without wake word detection (production mode)"
     ),
     skip_validation: bool = typer.Option(
         False,
@@ -200,6 +255,8 @@ def start(
         success = asyncio.run(run_bitbot(
             tier=hardware_tier,
             verbose=verbose,
+            debug=debug,
+            nowake=nowake,
             validate_env=not skip_validation
         ))
         if not success:
@@ -340,16 +397,43 @@ def chat():
 
 
 @app.command()
+def webclient(
+    host: str = typer.Option(
+        "127.0.0.1",
+        "--host", "-h",
+        help="Host to bind the web server to"
+    ),
+    port: int = typer.Option(
+        8080,
+        "--port", "-p",
+        help="Port to bind the web server to"
+    ),
+    reload: bool = typer.Option(
+        False,
+        "--reload",
+        help="Enable auto-reload for development"
+    )
+):
+    """Start the BitBot web client interface."""
+    from bitbot.web_client.server import start_web_server
+    
+    typer.echo(f"🌐 Starting BitBot Web Client at http://{host}:{port}")
+    typer.echo("Press Ctrl+C to stop the server")
+    
+    try:
+        start_web_server(host=host, port=port, reload=reload)
+    except KeyboardInterrupt:
+        typer.echo("\n👋 BitBot Web Client stopped")
+    except Exception as e:
+        typer.echo(f"❌ Error starting web client: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
 def version():
     """Show BitBot version information."""
-    from bitbot import __version__, __author__, __license__
-    
-    typer.echo(f"🤖 BitBot v{__version__}")
-    typer.echo(f"Author: {__author__}")
-    typer.echo(f"License: {__license__}")
-    typer.echo("")
+    typer.echo("🤖 BitBot v1.0.0")
     typer.echo("Local Real-Time AI Assistant")
-    typer.echo("https://github.com/bitbot/bitbot")
 
 
 if __name__ == "__main__":

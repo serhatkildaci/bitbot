@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BitBot Terminal Interface</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="terminal-container">
+        <div class="terminal-header">
+            <div class="terminal-controls">
+                <span class="control-btn close"></span>
+                <span class="control-btn minimize"></span>
+                <span class="control-btn maximize"></span>
+            </div>
+            <div class="terminal-title">
+                <span class="title-text">BitBot Terminal v1.0.0</span>
+                <span class="connection-indicator" id="connection-status">●</span>
+            </div>
+        </div>
+
+        <div class="terminal-body">
+            <div class="ascii-banner">
+                <pre id="ascii-art">
+ ██████╗ ██╗████████╗██████╗  ██████╗ ████████╗
+ ██╔══██╗██║╚══██╔══╝██╔══██╗██╔═══██╗╚══██╔══╝
+ ██████╔╝██║   ██║   ██████╔╝██║   ██║   ██║   
+ ██╔══██╗██║   ██║   ██╔══██╗██║   ██║   ██║   
+ ██████╔╝██║   ██║   ██████╔╝╚██████╔╝   ██║   
+ ╚═════╝ ╚═╝   ╚═╝   ╚═════╝  ╚═════╝    ╚═╝   
+                                               
+      LOCAL AI ASSISTANT TERMINAL v1.0.0
+      ====================================
+                </pre>
+            </div>
+
+            <div class="system-info">
+                <div class="info-line">
+                    <span class="label">SYSTEM:</span>
+                    <span class="value" id="system-status">OFFLINE</span>
+                </div>
+                <div class="info-line">
+                    <span class="label">PIPELINE:</span>
+                    <span class="value" id="pipeline-status">NOT_INITIALIZED</span>
+                </div>
+                <div class="info-line">
+                    <span class="label">UPTIME:</span>
+                    <span class="value" id="uptime-display">00:00:00</span>
+                </div>
+                <div class="info-line">
+                    <span class="label">MODEL:</span>
+                    <span class="value" id="model-info">NONE</span>
+                </div>
+                <div class="info-line">
+                    <span class="label">VOICE:</span>
+                    <span class="value" id="voice-status">INACTIVE</span>
+                </div>
+            </div>
+
+            <div class="terminal-output" id="terminal-output">
+                <div class="output-line startup">
+                    <span class="timestamp">[00:00:00]</span>
+                    <span class="message">BitBot Terminal Interface initialized</span>
+                </div>
+                <div class="output-line info">
+                    <span class="timestamp">[00:00:00]</span>
+                    <span class="message">Type '/help' for available commands</span>
+                </div>
+                <div class="output-line info">
+                    <span class="timestamp">[00:00:00]</span>
+                    <span class="message">Type '/init' to initialize BitBot system</span>
+                </div>
+            </div>
+
+            <div class="terminal-input-container">
+                <div class="input-line">
+                    <span class="prompt">
+                        <span class="user">user</span>@<span class="host">bitbot</span>:<span class="path">~</span>$ 
+                    </span>
+                    <input type="text" 
+                           id="terminal-input" 
+                           class="terminal-input" 
+                           autocomplete="off" 
+                           spellcheck="false"
+                           placeholder="Enter command..."
+                           autofocus>
+                    <span class="cursor" id="terminal-cursor">█</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-section">
+                <span class="status-item">
+                    <span class="status-label">WS:</span>
+                    <span class="status-value" id="ws-status">DISCONNECTED</span>
+                </span>
+                <span class="status-item">
+                    <span class="status-label">CPU:</span>
+                    <span class="status-value" id="cpu-usage">0%</span>
+                </span>
+                <span class="status-item">
+                    <span class="status-label">MEM:</span>
+                    <span class="status-value" id="mem-usage">0MB</span>
+                </span>
+            </div>
+            <div class="status-section">
+                <span class="status-item">
+                    <span class="status-label">PORT:</span>
+                    <span class="status-value">8080</span>
+                </span>
+                <span class="status-item">
+                    <span class="status-label">TIME:</span>
+                    <span class="status-value" id="current-time">00:00:00</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden elements for functionality -->
+    <div id="help-content" class="hidden">
+AVAILABLE COMMANDS:
+==================
+
+SYSTEM CONTROL:
+  /init              Initialize BitBot components
+  /start             Start voice pipeline
+  /stop              Stop voice pipeline  
+  /restart           Restart the pipeline
+  /status            Show detailed system status
+  /config            Show configuration
+  
+CHAT COMMANDS:
+  /clear             Clear terminal output
+  /history           Show chat history
+  /save              Save conversation log
+  
+UTILITY:
+  /help              Show this help message
+  /version           Show version information
+  /exit              Disconnect from terminal
+  
+CHAT MODE:
+  Simply type your message without '/' to chat with BitBot
+  
+EXAMPLES:
+  /init
+  /start
+  Hello BitBot, how are you?
+  /stop
+    </div>
+
+    <audio id="terminal-beep" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSqO2vLKeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSqO2vLKeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSqO2vLKeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSqO2vLKeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSqO2vLKeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSqO2vLKeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSqO2vLKeSsFJHfH8N2QQAoUXrTp66hVFA==" type="audio/wav">
+    </audio>
+
+    <script src="/static/app.js"></script>
+</body>
+</html> 

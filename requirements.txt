@@ -19,7 +19,7 @@ RealtimeTTS>=0.3.0
 piper-tts>=1.2.0
 
 # Wake Word Detection
-pvporcupine>=3.0.0
+openwakeword>=0.6.0
 
 # Async & Concurrency
 asyncio-mqtt>=0.13.0  # For potential future integrations
@@ -38,4 +38,9 @@ pydantic>=2.4.0
 typer>=0.9.0  # For CLI interface
 
 # System dependencies
-psutil>=5.9.0 
+psutil>=5.9.0
+
+# Web Client Interface
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=11.0.0 

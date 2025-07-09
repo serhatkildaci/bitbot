@@ -59,7 +59,7 @@ def test_imports():
         return False
     
     try:
-        from bitbot.wake_word.porcupine_detector import WakeWordDetector
+        from bitbot.wake_word.openwakeword_detector import WakeWordDetector
         print("✅ Wake word module imported successfully")
         
     except Exception as e:

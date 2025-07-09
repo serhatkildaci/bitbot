@@ -34,19 +34,28 @@ class AudioChunk:
 
 
 class AudioBuffer:
-    """Thread-safe audio buffer for real-time processing."""
+    """Thread-safe audio buffer optimized for gentle M1 processing."""
     
-    def __init__(self, maxsize: int = 100):
+    def __init__(self, maxsize: int = 500):  # Much larger default for M1 systems
         self._queue = queue.Queue(maxsize=maxsize)
         self._stop_event = threading.Event()
+        self._dropped_chunks = 0
+        self._last_warning_time = 0
     
     def put(self, chunk: AudioChunk, block: bool = True) -> bool:
-        """Add audio chunk to buffer."""
+        """Add audio chunk to buffer with gentle overflow handling."""
         try:
             self._queue.put(chunk, block=block)
             return True
         except queue.Full:
-            logger.warning("Audio buffer full, dropping chunk")
+            self._dropped_chunks += 1
+            # Only warn every 5 seconds to avoid spam
+            import time
+            current_time = time.time()
+            if current_time - self._last_warning_time > 5.0:
+                logger.warning(f"Audio buffer full, dropped {self._dropped_chunks} chunks (processing too slow for hardware)")
+                self._last_warning_time = current_time
+                self._dropped_chunks = 0
             return False
     
     def get(self, timeout: Optional[float] = None) -> Optional[AudioChunk]:
@@ -83,13 +92,14 @@ class AudioStream:
         self.config = config
         self.input_stream: Optional[Any] = None  # sd.InputStream when available
         self.output_stream: Optional[Any] = None  # sd.OutputStream when available
-        self.input_buffer = AudioBuffer()
-        self.output_buffer = AudioBuffer()
+        # Use larger buffer sizes for M1 systems to prevent overflow
+        self.input_buffer = AudioBuffer(maxsize=getattr(config, 'max_buffer_chunks', 500))
+        self.output_buffer = AudioBuffer(maxsize=getattr(config, 'max_buffer_chunks', 500))
         self._input_callback: Optional[Callable] = None
         self._is_recording = False
         self._is_playing = False
         
-        logger.info(f"AudioStream initialized: {config.sample_rate}Hz, {config.channels} channels")
+        logger.info(f"AudioStream initialized (M1-optimized): {config.sample_rate}Hz, {config.channels} channels, {config.chunk_size} chunk size, {getattr(config, 'max_buffer_chunks', 500)} buffer chunks")
     
     def set_input_callback(self, callback: Callable[[AudioChunk], None]):
         """Set callback for processing input audio chunks."""

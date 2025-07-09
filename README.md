@@ -2,6 +2,8 @@
 
 **Local Real-Time AI Assistant with Speech-to-Text, Large Language Model, and Text-to-Speech Integration**
 
+> ⚠️ **Development Notice**: This project is currently under active development and is primarily intended for learning and educational purposes. Features may be incomplete, unstable, or subject to significant changes. This is an experimental project to explore local AI assistant architecture and implementation.
+
 ## Overview
 
 BitBot is a local, real-time, audio-enabled AI assistant designed to run entirely on consumer hardware without requiring cloud services or internet connectivity for core functionality. The project implements a streaming STT → LLM → TTS pipeline with wake word detection, optimized for responsive conversational interactions on daily-driver laptops and desktop computers.
@@ -85,7 +87,16 @@ python main.py chat
 - Rich terminal interface with commands
 - Conversation history and status
 
-### Voice Mode (Coming Soon)
+### Voice Chat Mode (NEW!)
+```bash
+python main.py start --nowake
+```
+- **Direct conversation mode** - no wake word needed
+- **Clean chat interface** - production-ready experience
+- **Turn-based conversation** - BitBot waits for you to finish speaking
+- **Voice input/output** - speak naturally and get audio responses
+
+### Traditional Voice Mode (Wake Word)
 ```bash
 python main.py start
 ```
@@ -97,16 +108,19 @@ python main.py start
 
 ### Available Commands
 ```bash
-python main.py chat           # Start text chat interface
-python main.py config         # Show current configuration
-python main.py test           # Test all components (when ready)
-python main.py setup          # Show setup guide
-python main.py version        # Show version info
+python main.py chat                    # Start text chat interface
+python main.py start                   # Start voice assistant with wake word
+python main.py start --nowake          # Start direct voice chat (no wake word)
+python main.py start --debug           # Start with debug logging
+python main.py config                  # Show current configuration
+python main.py test                    # Test all components (when ready)
+python main.py setup                   # Show setup guide
+python main.py version                 # Show version info
 ```
 
 ### Development Commands
 ```bash
-python test_mvp.py           # Test architecture without dependencies
+python test_mvp.py                     # Test architecture without dependencies
 ```
 
 ## ⚙️ Configuration

@@ -97,35 +97,45 @@ class OllamaClient:
     async def _test_connection(self) -> bool:
         """Test connection to Ollama server."""
         try:
-            # Try to list models
-            models = await self.client.models.list()
-            available_models = [model.id for model in models.data]
-            logger.info(f"Available models: {available_models}")
-            
-            # Check if our configured model is available
-            if self.config.model_name not in available_models:
-                logger.warning(f"Model '{self.config.model_name}' not found. Available: {available_models}")
-                # Could auto-pull the model here if needed
-                
-            return True
+            # Test with a simple API call to Ollama
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{self.config.base_url}/api/tags")
+                if response.status_code == 200:
+                    models_data = response.json()
+                    available_models = [model['name'] for model in models_data.get('models', [])]
+                    logger.info(f"Available models: {available_models}")
+                    
+                    # Check if our configured model is available
+                    model_found = any(self.config.model_name in model for model in available_models)
+                    if not model_found:
+                        logger.warning(f"Model '{self.config.model_name}' not found. Available: {available_models}")
+                        # Still return True - model might be auto-downloadable
+                    
+                    return True
+                else:
+                    logger.error(f"Ollama API returned status {response.status_code}")
+                    return False
+                    
         except Exception as e:
             logger.error(f"Ollama connection test failed: {e}")
             return False
     
     def _get_default_system_prompt(self) -> str:
         """Get the default system prompt for BitBot."""
-        return """You are BitBot, a local AI assistant designed to be helpful, harmless, and honest. 
+        return """You are BitBot, a fully local AI assistant focused on privacy, clarity, and utility.
 
-Key characteristics:
-- You run entirely locally on the user's device for privacy
-- You provide concise, accurate, and helpful responses
-- You can engage in natural conversation about a wide range of topics
-- You respect user privacy and don't share or store personal information externally
-- If you're unsure about something, you say so rather than guessing
-- You aim to be conversational but not overly chatty
+Your core principles:
+- Run entirely on the user's device — no cloud, no external data sharing
+- Prioritize accurate, concise, and actionable responses
+- Communicate in a natural, friendly, and professional tone
+- Be transparent: if you're uncertain about something, say so clearly
+- Never guess, never make up facts
+- Avoid unnecessary chatter; be helpful without being verbose
+- Never collect, store, or transmit personal data
 
-Respond naturally and helpfully to user queries. Keep responses reasonably concise unless the user specifically asks for detailed information."""
-    
+Always prioritize user trust, clarity, and usefulness. Reply naturally, stay grounded, and only elaborate when asked."""
+
     def set_system_prompt(self, prompt: str):
         """Update the system prompt."""
         self.system_prompt = prompt
@@ -173,46 +183,72 @@ Respond naturally and helpfully to user queries. Keep responses reasonably conci
     
     async def generate_response(self, user_input: str) -> Optional[LLMResponse]:
         """Generate response to user input."""
-        if not self.client:
-            logger.error("Client not initialized")
-            return None
-        
         try:
             # Add user message
             self.add_user_message(user_input)
             
-            # Prepare messages for API
-            messages = self._format_messages_for_api()
+            # Use Ollama's native API
+            import httpx
             
-            # Generate response
-            response = await self.client.chat.completions.create(
-                model=self.config.model_name,
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                stream=False  # Non-streaming for simple response
-            )
+            # Prepare prompt from conversation history
+            prompt = self._build_prompt_from_history()
             
-            if response.choices:
-                content = response.choices[0].message.content
-                finish_reason = response.choices[0].finish_reason
-                
-                # Add assistant response to history
-                self.add_assistant_message(content)
-                
-                return LLMResponse(
-                    content=content,
-                    finish_reason=finish_reason,
-                    model=response.model,
-                    usage=response.usage.model_dump() if response.usage else None
+            payload = {
+                "model": self.config.model_name,
+                "prompt": prompt,
+                "options": {
+                    "temperature": self.config.temperature,
+                    "num_predict": self.config.max_tokens
+                },
+                "stream": False
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.config.base_url}/api/generate",
+                    json=payload
                 )
-            else:
-                logger.warning("No response choices returned")
-                return None
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    content = result.get("response", "").strip()
+                    
+                    if content:
+                        # Add assistant response to history
+                        self.add_assistant_message(content)
+                        
+                        return LLMResponse(
+                            content=content,
+                            finish_reason="stop",
+                            model=self.config.model_name,
+                            usage=None
+                        )
+                    else:
+                        logger.warning("Empty response from model")
+                        return None
+                else:
+                    logger.error(f"API request failed with status {response.status_code}: {response.text}")
+                    return None
                 
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             return None
+    
+    def _build_prompt_from_history(self) -> str:
+        """Build a prompt string from conversation history."""
+        prompt_parts = []
+        
+        for message in self.conversation_history:
+            if message.role == "system":
+                prompt_parts.append(f"System: {message.content}")
+            elif message.role == "user":
+                prompt_parts.append(f"Human: {message.content}")
+            elif message.role == "assistant":
+                prompt_parts.append(f"Assistant: {message.content}")
+        
+        prompt_parts.append("Assistant:")  # Prompt for next response
+        
+        return "\n\n".join(prompt_parts)
     
     async def generate_streaming_response(self, user_input: str) -> AsyncGenerator[str, None]:
         """Generate streaming response to user input."""

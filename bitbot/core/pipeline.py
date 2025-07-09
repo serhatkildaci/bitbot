@@ -19,7 +19,7 @@ from ..audio.manager import AudioManager, AudioChunk
 from ..stt.whisper_engine import STTEngine, TranscriptionResult
 from ..llm.ollama_client import LLMEngine, LLMResponse
 from ..tts.simple_engine import TTSEngine  # Use simple TTS engine instead
-from ..wake_word.porcupine_detector import WakeWordDetector, WakeWordDetection
+from ..wake_word.openwakeword_detector import WakeWordDetector, WakeWordDetection
 
 
 class PipelineState(Enum):
@@ -47,8 +47,10 @@ class PipelineStats:
 class BitBotPipeline:
     """Main BitBot pipeline orchestrator."""
     
-    def __init__(self, config: BitBotConfig):
+    def __init__(self, config: BitBotConfig, debug_mode: bool = False, nowake_mode: bool = False):
         self.config = config
+        self.debug_mode = debug_mode
+        self.nowake_mode = nowake_mode
         self.state = PipelineState.STOPPED
         self.stats = PipelineStats()
         self._start_time = 0.0
@@ -65,6 +67,30 @@ class BitBotPipeline:
         self._conversation_active = False
         self._response_start_time = 0.0
         self._shutdown_event = asyncio.Event()
+        
+        # Debug mode logging
+        self._audio_chunk_counter = 0
+        self._audio_routing_counter = 0
+        self._transcription_counter = 0
+        
+        # Chat mode attributes (for --nowake)
+        self._chat_mode = False
+        self._last_audio_time = 0.0
+        self._silence_threshold = 1.0
+        self._is_speaking = False
+        self._pending_transcription = ""
+        self._silence_timer = None
+        
+        if self.debug_mode:
+            logger.info("🐛 DEBUG MODE ENABLED - Microphone input will be logged to screen")
+        
+        if self.nowake_mode:
+            logger.info("🚀 NO-WAKE MODE ENABLED - Direct conversation mode")
+            # In no-wake mode, use clean chat interface
+            self._chat_mode = True
+            self._last_audio_time = 0.0
+            self._silence_threshold = 1.0  # 1 second of silence before processing
+            self._is_speaking = False
         
         logger.info(f"BitBot pipeline initialized for tier: {config.tier.value}")
     
@@ -124,12 +150,16 @@ class BitBotPipeline:
                 logger.error("Failed to initialize TTS engine")
                 return False
             
-            # Wake Word Detector
-            logger.info("Initializing wake word detector...")
-            self.wake_word_detector = WakeWordDetector(self.config.wake_word, self.config.audio)
-            if not await self.wake_word_detector.initialize():
-                logger.error("Failed to initialize wake word detector")
-                return False
+            # Wake Word Detector (skip in no-wake mode)
+            if not self.nowake_mode:
+                logger.info("Initializing wake word detector...")
+                self.wake_word_detector = WakeWordDetector(self.config.wake_word, self.config.audio)
+                if not await self.wake_word_detector.initialize():
+                    logger.error("Failed to initialize wake word detector")
+                    return False
+            else:
+                logger.info("⏭️ Skipping wake word detector initialization (no-wake mode)")
+                self.wake_word_detector = None
             
             return True
             
@@ -141,12 +171,33 @@ class BitBotPipeline:
         """Set up callbacks between components."""
         # Audio → STT and Wake Word
         def audio_callback(chunk: AudioChunk):
-            # Send to STT engine
-            if self.stt_engine and self._conversation_active:
-                self.stt_engine.process_audio_chunk(chunk)
+            # Debug: Log audio routing decisions
+            if self.debug_mode and hasattr(self, '_audio_routing_counter'):
+                self._audio_routing_counter += 1
+            elif self.debug_mode:
+                self._audio_routing_counter = 1
+                
+            # Log every 50th chunk to trace audio routing
+            if self.debug_mode and self._audio_routing_counter % 50 == 0:
+                print(f"🔄 Audio Routing #{self._audio_routing_counter}: "
+                      f"STT={'✅' if (self.stt_engine and (self._conversation_active or self.debug_mode)) else '❌'}, "
+                      f"WakeWord={'✅' if (self.wake_word_detector and not self._conversation_active) else '❌'}, "
+                      f"ConversationActive={self._conversation_active}")
             
-            # Send to wake word detector
-            if self.wake_word_detector and not self._conversation_active:
+            # Send to STT engine (always in debug mode, no-wake mode, or when conversation active)
+            # In chat mode, only process audio when not speaking
+            if self.stt_engine and (self._conversation_active or self.debug_mode or self.nowake_mode):
+                if not (self._chat_mode and self._is_speaking):
+                    self.stt_engine.process_audio_chunk(chunk)
+                    # Track audio activity for silence detection
+                    if self._chat_mode:
+                        import time
+                        self._last_audio_time = time.time()
+            
+            # Send to wake word detector (skip in no-wake mode)
+            if self.wake_word_detector and not self._conversation_active and not self.nowake_mode:
+                if self.debug_mode and self._audio_routing_counter % 50 == 0:
+                    print(f"🎯 Sending audio chunk to wake word detector...")
                 self.wake_word_detector.process_audio_chunk(chunk)
         
         if self.audio_manager:
@@ -154,8 +205,32 @@ class BitBotPipeline:
         
         # STT → LLM
         def transcription_callback(result: TranscriptionResult):
-            logger.info(f"Transcription received: '{result.text}'")
-            asyncio.create_task(self._process_transcription(result))
+            # In chat mode, suppress logs and use silence detection
+            if not self._chat_mode:
+                logger.info(f"Transcription received: '{result.text}'")
+            
+            # Chat mode: Clean interface, silence detection
+            if self._chat_mode and result.text.strip():
+                self._pending_transcription = result.text.strip()
+                # Start or reset silence timer
+                self._start_silence_timer()
+                return
+            
+            # Debug mode: Always show real-time transcription + conversation state
+            if self.debug_mode:
+                print(f"🗣️  YOU SAID: '{result.text}' (confidence: {result.confidence:.2f})")
+                # Every 10th transcription, show conversation state
+                if hasattr(self, '_transcription_counter'):
+                    self._transcription_counter += 1
+                else:
+                    self._transcription_counter = 1
+                    
+                if self._transcription_counter % 10 == 0:
+                    print(f"💬 Conversation State: Active={self._conversation_active}, Pipeline State={self.state.value}")
+            
+            # Only process with LLM if in conversation mode
+            if self._conversation_active:
+                asyncio.create_task(self._process_transcription(result))
         
         if self.stt_engine:
             self.stt_engine.add_transcription_callback(transcription_callback)
@@ -175,13 +250,32 @@ class BitBotPipeline:
         if self.tts_engine:
             self.tts_engine.add_synthesis_callback(tts_callback)
         
-        # Wake word detection
-        def wake_word_callback(detection: WakeWordDetection):
-            logger.info(f"Wake word detected: '{detection.keyword}'")
-            asyncio.create_task(self._handle_wake_word_detection(detection))
-        
-        if self.wake_word_detector:
-            self.wake_word_detector.add_detection_callback(wake_word_callback)
+        # Wake word detection (skip in no-wake mode)
+        if not self.nowake_mode:
+            def wake_word_callback(detection: WakeWordDetection):
+                logger.info(f"Wake word detected: '{detection.keyword}'")
+                
+                # Debug mode: Log wake word detection to screen
+                if self.debug_mode:
+                    print(f"🎯 WAKE WORD DETECTED: '{detection.keyword}' (confidence: {detection.confidence:.2f})")
+                
+                # Handle async task creation safely
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(self._handle_wake_word_detection(detection))
+                    else:
+                        # Schedule the task in a running loop
+                        asyncio.ensure_future(self._handle_wake_word_detection(detection))
+                except RuntimeError:
+                    # No event loop, create a new thread for async handling
+                    import threading
+                    def run_async():
+                        asyncio.run(self._handle_wake_word_detection(detection))
+                    threading.Thread(target=run_async, daemon=True).start()
+            
+            if self.wake_word_detector:
+                self.wake_word_detector.add_detection_callback(wake_word_callback)
     
     async def start(self) -> bool:
         """Start the BitBot pipeline."""
@@ -203,11 +297,27 @@ class BitBotPipeline:
                 logger.error("Failed to start audio output")
                 return False
             
-            # Start wake word detection
-            await self.wake_word_detector.start_listening()
-            
-            logger.info("🤖 BitBot is now listening for 'Hey BitBot'...")
-            await self._say_greeting()
+            # Start wake word detection (unless in no-wake mode)
+            if not self.nowake_mode:
+                await self.wake_word_detector.start_listening()
+                
+                # In debug mode, also start STT for real-time transcription
+                if self.debug_mode:
+                    await self.stt_engine.start_processing()
+                    logger.info("🐛 DEBUG MODE: Real-time speech transcription enabled")
+                
+                logger.info("🤖 BitBot is now listening for 'Hey BitBot'...")
+                await self._say_greeting()
+            else:
+                # No-wake mode: Start directly in conversation
+                self._conversation_active = True
+                self.state = PipelineState.PROCESSING
+                
+                # Start STT processing immediately
+                await self.stt_engine.start_processing()
+                
+                logger.info("🚀 BitBot ready for conversation (no wake word needed)")
+                await self.tts_engine.speak("Hello! I'm ready to help. What can I do for you?", interrupt=True)
             
             return True
             
@@ -302,9 +412,23 @@ class BitBotPipeline:
         
         self.stats.llm_responses_generated += 1
         
+        # Chat mode: Display clean response
+        if self._chat_mode:
+            print(f"🤖 BitBot: {response.content}")
+            print("🔊 Speaking...")
+        
+        # Mark as speaking to disable microphone
+        self._is_speaking = True
+        
         # Speak the response
         self.state = PipelineState.SPEAKING
         await self.tts_engine.speak_response(response, interrupt=True)
+        
+        # Mark as not speaking to re-enable microphone
+        self._is_speaking = False
+        
+        if self._chat_mode:
+            print("🎧 Listening...")
         
         # Update response time stats
         if self._response_start_time > 0:
@@ -316,7 +440,8 @@ class BitBotPipeline:
         
         if self._conversation_active:
             self.state = PipelineState.PROCESSING
-            logger.info("🎙️ Ready for next input...")
+            if not self._chat_mode:
+                logger.info("🎙️ Ready for next input...")
             # Reset for next interaction in this conversation
             self._response_start_time = time.time()
     
@@ -362,24 +487,73 @@ class BitBotPipeline:
         await asyncio.sleep(30.0)  # 30 second timeout
         
         if self._conversation_active:
-            logger.info("Conversation timeout - ending conversation")
-            await self.tts_engine.speak("I'll be here when you need me.", interrupt=True)
+            logger.info("⏰ Conversation timeout - ending conversation")
             await self._end_conversation()
     
     async def _say_greeting(self):
         """Say initial greeting."""
-        greeting = "Hello! I'm BitBot, your local AI assistant. Say 'Hey BitBot' to start a conversation."
-        await self.tts_engine.speak(greeting)
-        self.stats.tts_utterances_spoken += 1
+        if self.tts_engine:
+            await self.tts_engine.speak("Hello! Say 'Hey BitBot' to start a conversation.", interrupt=True)
     
+    def _start_silence_timer(self):
+        """Start or restart the silence detection timer."""
+        # Cancel existing timer
+        if self._silence_timer:
+            self._silence_timer.cancel()
+        
+        # Start new timer
+        self._silence_timer = asyncio.create_task(self._handle_silence_detection())
+    
+    async def _handle_silence_detection(self):
+        """Handle silence detection after user stops talking."""
+        try:
+            await asyncio.sleep(self._silence_threshold)
+            
+            # If we have pending transcription, process it
+            if self._pending_transcription and not self._is_speaking:
+                # Display user message in chat mode
+                if self._chat_mode:
+                    print(f"\n🗣️  You: {self._pending_transcription}")
+                
+                # Create transcription result and process
+                from ..stt.whisper_engine import TranscriptionResult
+                result = TranscriptionResult(
+                    text=self._pending_transcription,
+                    confidence=1.0,
+                    start_time=0.0,
+                    end_time=0.0,
+                    language="en",
+                    is_final=True
+                )
+                
+                # Clear pending transcription
+                self._pending_transcription = ""
+                
+                # Process with LLM
+                await self._process_transcription(result)
+                
+        except asyncio.CancelledError:
+            # Timer was cancelled (new audio detected)
+            pass
+    
+    def _chat_display(self, message: str, is_user: bool = False):
+        """Display message in clean chat format."""
+        if self._chat_mode:
+            if is_user:
+                print(f"\n🗣️  You: {message}")
+            else:
+                print(f"🤖 BitBot: {message}")
+
     def _update_response_time_stats(self, response_time: float):
         """Update response time statistics."""
-        if self.stats.average_response_time == 0:
+        if self.stats.llm_responses_generated == 1:
             self.stats.average_response_time = response_time
         else:
             # Moving average
+            alpha = 0.3  # Weight for new sample
             self.stats.average_response_time = (
-                self.stats.average_response_time * 0.8 + response_time * 0.2
+                alpha * response_time + 
+                (1 - alpha) * self.stats.average_response_time
             )
     
     def get_status(self) -> Dict[str, Any]:
@@ -433,8 +607,10 @@ class BitBotPipeline:
 class BitBotCore:
     """High-level BitBot core interface."""
     
-    def __init__(self, config_override: Optional[BitBotConfig] = None):
+    def __init__(self, config_override: Optional[BitBotConfig] = None, debug_mode: bool = False, nowake_mode: bool = False):
         self.config = config_override or config
+        self.debug_mode = debug_mode
+        self.nowake_mode = nowake_mode
         self.pipeline: Optional[BitBotPipeline] = None
         self._shutdown_handlers_set = False
     
@@ -444,7 +620,7 @@ class BitBotCore:
             logger.info(f"Initializing BitBot {self.config.tier.value}...")
             logger.info(f"Configuration: {self.config.get_config_summary()}")
             
-            self.pipeline = BitBotPipeline(self.config)
+            self.pipeline = BitBotPipeline(self.config, debug_mode=self.debug_mode, nowake_mode=self.nowake_mode)
             success = await self.pipeline.initialize()
             
             if success:
@@ -494,26 +670,23 @@ class BitBotCore:
         except KeyboardInterrupt:
             logger.info("Shutdown signal received")
         finally:
-            await self.stop()
-            await self.cleanup()
+            if self.pipeline:
+                await self.pipeline.cleanup()
+                self.pipeline = None 
     
     def _setup_shutdown_handlers(self):
-        """Set up graceful shutdown handlers."""
-        if self._shutdown_handlers_set:
-            return
+        """Set up signal handlers for graceful shutdown."""
+        import signal
         
         def signal_handler(signum, frame):
             logger.info(f"Received signal {signum}")
             if self.pipeline:
-                asyncio.create_task(self.pipeline.stop())
+                # Signal the pipeline to stop
+                self.pipeline._shutdown_event.set()
         
-        # Set up signal handlers for graceful shutdown
-        try:
-            signal.signal(signal.SIGINT, signal_handler)
-            signal.signal(signal.SIGTERM, signal_handler)
-            self._shutdown_handlers_set = True
-        except Exception as e:
-            logger.warning(f"Could not set signal handlers: {e}")
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        self._shutdown_handlers_set = True
     
     async def cleanup(self):
         """Clean up BitBot core."""

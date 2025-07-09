@@ -8,11 +8,21 @@ BitBot is a local, real-time, audio-enabled AI assistant designed to run entirel
 
 ## 🚀 Quick Start
 
+### Current Development Status
+
+**MVP Status**: 🔧 **In Active Development**
+- ✅ Core architecture implemented
+- ✅ Simplified TTS engine working
+- ✅ Text chat interface ready
+- ✅ Component integration designed
+- 🔧 Dependency installation needed
+- 🔧 Model management in progress
+
 ### Prerequisites
 
 1. **Python 3.8+** with pip
-2. **Ollama** for local LLM serving
-3. **Porcupine Access Key** for wake word detection
+2. **Ollama** for local LLM serving (future)
+3. **Porcupine Access Key** for wake word detection (future)
 
 ### Installation
 
@@ -22,19 +32,31 @@ BitBot is a local, real-time, audio-enabled AI assistant designed to run entirel
    cd bitbot
    ```
 
-2. **Install dependencies:**
+2. **Install core dependencies:**
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements-core.txt
    ```
 
-3. **Install and setup Ollama:**
+3. **Test the architecture:**
+   ```bash
+   python test_mvp.py
+   ```
+
+4. **Try the text chat interface:**
+   ```bash
+   python main.py chat
+   ```
+
+### Development Setup (Advanced)
+
+1. **Install Ollama (for LLM integration):**
    ```bash
    # Download from https://ollama.com/
    ollama pull mistral:7b-instruct
    ollama serve
    ```
 
-4. **Get Porcupine access key:**
+2. **Get Porcupine access key (for wake word):**
    - Visit https://console.picovoice.ai/
    - Create account and get access key
    - Copy `.env.example` to `.env` and add your key:
@@ -43,51 +65,48 @@ BitBot is a local, real-time, audio-enabled AI assistant designed to run entirel
    # Edit .env and add your PORCUPINE_ACCESS_KEY
    ```
 
-5. **Test setup:**
+3. **Test full setup:**
    ```bash
    python main.py test
    ```
 
-6. **Start BitBot:**
+4. **Start BitBot (when ready):**
    ```bash
    python main.py start
    ```
 
 ## 🎙️ Usage
 
-1. **Start BitBot:**
-   ```bash
-   python main.py start
-   ```
-
-2. **Wake BitBot:**
-   - Say "Hey BitBot" (or "Hey Google" in MVP)
-   - BitBot will respond with "Yes?" and start listening
-
-3. **Have a conversation:**
-   - Speak naturally to BitBot
-   - BitBot will process your speech, generate responses, and speak back
-   - Conversation continues until you say goodbye or timeout
-
-4. **End conversation:**
-   - Say "goodbye", "bye", "exit", or "thank you"
-
-## 📋 Commands
-
-### Main Commands
+### Text Chat Mode (Available Now)
 ```bash
-python main.py start          # Start BitBot assistant
+python main.py chat
+```
+- Interactive text conversation with BitBot
+- Rich terminal interface with commands
+- Conversation history and status
+
+### Voice Mode (Coming Soon)
+```bash
+python main.py start
+```
+- **Wake BitBot:** Say "Hey BitBot"
+- **Talk naturally:** BitBot processes speech and responds
+- **End conversation:** Say "goodbye" or "bye"
+
+## 📋 Current Commands
+
+### Available Commands
+```bash
+python main.py chat           # Start text chat interface
 python main.py config         # Show current configuration
-python main.py test           # Test all components
+python main.py test           # Test all components (when ready)
 python main.py setup          # Show setup guide
 python main.py version        # Show version info
 ```
 
-### Options
+### Development Commands
 ```bash
-python main.py start --tier medium    # Force hardware tier
-python main.py start --verbose        # Verbose logging
-python main.py start --skip-validation # Skip environment validation
+python test_mvp.py           # Test architecture without dependencies
 ```
 
 ## ⚙️ Configuration
@@ -99,24 +118,24 @@ BitBot automatically detects your hardware and configures accordingly:
 - **BitBotS (Small)**: Standard PCs, older laptops
   - STT: Whisper tiny.en
   - LLM: Mistral 7B (Q4_K_M)
-  - TTS: Piper TTS
+  - TTS: Simple pyttsx3
 
 - **BitBotM (Medium)**: Modern laptops, 4GB+ VRAM
   - STT: Whisper small.en
   - LLM: Llama 3.1 8B (Q4_K_M)
-  - TTS: Kyutai TTS
+  - TTS: Simple pyttsx3 + gTTS
 
 - **BitBotL (Large)**: High-end PCs, 8GB+ VRAM
   - STT: Whisper large-v3
   - LLM: Llama 3.1 8B (Q5_K_M)
-  - TTS: Kyutai TTS
+  - TTS: Simple pyttsx3 + gTTS
 
 ### Environment Variables
 
 Edit `.env` file to customize:
 
 ```bash
-# Required
+# Required (for voice mode)
 PORCUPINE_ACCESS_KEY=your_key_here
 
 # Optional
@@ -135,9 +154,10 @@ BitBot follows a modular, asynchronous architecture:
 - **Audio Manager**: Cross-platform audio I/O with sounddevice
 - **STT Engine**: Faster Whisper for speech recognition
 - **LLM Engine**: Ollama client with OpenAI-compatible API
-- **TTS Engine**: RealtimeTTS with multiple backends
+- **TTS Engine**: Simple pyttsx3-based synthesis (MVP)
 - **Wake Word**: Picovoice Porcupine for trigger detection
 - **Pipeline**: Asyncio orchestration of STT → LLM → TTS
+- **Chat Interface**: Rich text-based interaction
 
 ### Data Flow
 
@@ -145,6 +165,10 @@ BitBot follows a modular, asynchronous architecture:
 Audio Input → Wake Word Detection → STT → LLM → TTS → Audio Output
      ↑                ↓                              ↓
    Microphone    "Hey BitBot"                   Speakers
+
+Text Input → LLM → Text Output
+     ↑              ↓
+  Chat CLI      Terminal
 ```
 
 ## 🛠️ Development
@@ -153,85 +177,111 @@ Audio Input → Wake Word Detection → STT → LLM → TTS → Audio Output
 
 ```
 bitbot/
-├── bitbot/                 # Main package
-│   ├── audio/             # Audio I/O management
-│   ├── stt/               # Speech-to-text engines
-│   ├── llm/               # LLM integration
-│   ├── tts/               # Text-to-speech engines
-│   ├── wake_word/         # Wake word detection
-│   ├── core/              # Pipeline orchestration
-│   └── config/            # Configuration management
-├── main.py                # Entry point
-├── requirements.txt       # Dependencies
-└── README.md             # This file
+├── audio/             # Audio I/O management
+├── cli/               # Command-line interfaces  
+├── config/            # Configuration management
+├── core/              # Pipeline orchestration
+├── llm/               # LLM integration
+├── stt/               # Speech-to-text engines
+├── tts/               # Text-to-speech engines
+│   ├── simple_engine.py    # MVP TTS (current)
+│   └── realtime_engine.py  # Advanced TTS (future)
+├── wake_word/         # Wake word detection
+└── __init__.py
+main.py                # CLI entry point
+test_mvp.py           # Architecture tests
+requirements-core.txt  # Core dependencies (MVP)
+requirements.txt      # Full dependencies (future)
 ```
+
+### Development Status
+
+See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for detailed progress tracking.
+
+### Git Branching Strategy
+
+- `main` - Production-ready releases
+- `develop` - Integration branch for features
+- `feature/*` - Individual component development
+- `release/*` - Release preparation
 
 ### Key Technologies
 
 - **Python asyncio**: Non-blocking I/O and pipeline orchestration
 - **Faster Whisper**: High-performance STT inference
 - **Ollama**: Local LLM deployment platform
-- **RealtimeTTS**: Low-latency text-to-speech synthesis
+- **pyttsx3**: Cross-platform text-to-speech (MVP)
 - **Picovoice Porcupine**: Accurate wake word detection
 - **sounddevice**: Cross-platform audio handling
+- **Rich**: Beautiful terminal interfaces
 
 ## 🚨 Troubleshooting
 
 ### Common Issues
 
-1. **Ollama not running:**
+1. **Architecture test failures:**
+   ```bash
+   pip install psutil loguru
+   python test_mvp.py
+   ```
+
+2. **Missing dependencies:**
+   ```bash
+   pip install -r requirements-core.txt
+   ```
+
+3. **Ollama not running (future):**
    ```bash
    ollama serve
    ```
 
-2. **Porcupine access key missing:**
-   - Get key from https://console.picovoice.ai/
-   - Add to `.env` file
-
-3. **Audio device issues:**
+4. **Audio device issues (future):**
    ```bash
    python main.py test  # Check audio devices
    ```
 
-4. **Model download issues:**
-   ```bash
-   ollama pull mistral:7b-instruct
-   ```
+### Getting Help
 
-5. **Permission issues on Linux:**
-   ```bash
-   sudo usermod -a -G audio $USER  # Audio permissions
-   ```
+Check detailed documentation:
+- [Development Status](DEVELOPMENT_STATUS.md) - Current progress
+- [MVP Development Plan](MVP_DEVELOPMENT_PLAN.md) - Complete roadmap
 
-### Logs
+## 🎯 Current MVP Status
 
-Check logs in `logs/bitbot.log` for detailed debugging information.
+### ✅ Working Features
+- ✅ Text chat interface with rich formatting
+- ✅ LLM integration architecture
+- ✅ Configuration system with hardware tiers
+- ✅ Modular component design
+- ✅ Async pipeline orchestration
+- ✅ CLI commands and help system
 
-## 🎯 MVP Limitations
+### 🔧 In Development
+- 🔧 Model downloading and management
+- 🔧 Audio pipeline optimization
+- 🔧 Integration testing
+- 🔧 Dependency resolution completion
 
-This MVP includes core functionality with some limitations:
-
-- **Wake Word**: Uses "Hey Google" instead of custom "Hey BitBot" (requires training)
-- **TTS Backends**: Limited voice options in MVP
-- **Tool Integration**: MCP and RAG features planned for future releases
-- **Model Optimization**: Full quantization optimizations in progress
+### 📋 Coming Soon
+- Wake word detection integration
+- Speech-to-text processing
+- Text-to-speech synthesis
+- End-to-end voice pipeline
+- Performance optimization
 
 ## 🔮 Roadmap
 
-### Next Features
-- [ ] Custom "Hey BitBot" wake word training
-- [ ] Model Context Protocol (MCP) tool integration
-- [ ] LanceDB vector storage for RAG
-- [ ] Advanced TTS voice selection
-- [ ] Streaming LLM responses
-- [ ] Multi-language support
-- [ ] Web interface for configuration
+### Next Release (v0.1.0 - MVP)
+- [ ] Complete dependency installation
+- [ ] Model management system
+- [ ] End-to-end voice pipeline
+- [ ] Integration testing
+- [ ] Performance optimization
 
-### Hardware Optimization
-- [ ] Apple Silicon optimizations
-- [ ] GPU acceleration improvements
-- [ ] Memory usage optimization
-- [ ] Real-time performance tuning
+### Future Releases
+- **v0.2.0**: Advanced TTS, web interface, custom wake words
+- **v0.3.0**: MCP integration, RAG, multi-language
+- **v1.0.0**: Production deployment, enterprise features
 
 ## 📄 License
 
@@ -239,15 +289,10 @@ MIT License - see LICENSE file for details.
 
 ## 🤝 Contributing
 
-This project is in early development. Contribution guidelines and development setup instructions will be provided as the codebase matures.
-
-## 💡 Support
-
-For issues, questions, or contributions:
-- Check logs in `logs/bitbot.log`
-- Run `python main.py test` to diagnose issues
-- Review environment variables in `.env`
+This project is in active development. See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for current priorities and how to contribute.
 
 ---
 
 **BitBot**: Your local AI assistant, private by design. 🤖
+
+*Current Status: MVP in development with core architecture complete*

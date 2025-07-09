@@ -306,6 +306,40 @@ def test():
 
 
 @app.command()
+def chat():
+    """Start text-based chat interface with BitBot."""
+    
+    async def run_chat():
+        """Run the chat interface."""
+        from bitbot.cli.chat_interface import ChatInterface
+        from bitbot.config.settings import BitBotConfig
+        
+        setup_logging(verbose=False)
+        load_environment()
+        
+        config = BitBotConfig()
+        chat_interface = ChatInterface(config)
+        
+        typer.echo("🤖 Starting BitBot chat interface...")
+        
+        if await chat_interface.initialize():
+            await chat_interface.start_chat()
+        else:
+            typer.echo("❌ Failed to initialize chat interface")
+            raise typer.Exit(1)
+        
+        await chat_interface.cleanup()
+    
+    try:
+        asyncio.run(run_chat())
+    except KeyboardInterrupt:
+        typer.echo("\n👋 Chat session ended")
+    except Exception as e:
+        typer.echo(f"💥 Chat error: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
 def version():
     """Show BitBot version information."""
     from bitbot import __version__, __author__, __license__

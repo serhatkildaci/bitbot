@@ -18,7 +18,7 @@ from ..config.settings import BitBotConfig, config
 from ..audio.manager import AudioManager, AudioChunk
 from ..stt.whisper_engine import STTEngine, TranscriptionResult
 from ..llm.ollama_client import LLMEngine, LLMResponse
-from ..tts.realtime_engine import TTSEngine
+from ..tts.simple_engine import TTSEngine  # Use simple TTS engine instead
 from ..wake_word.porcupine_detector import WakeWordDetector, WakeWordDetection
 
 

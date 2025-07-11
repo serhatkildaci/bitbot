@@ -161,7 +161,9 @@ LOG_LEVEL=INFO
 
 ## 🏗️ Architecture
 
-BitBot follows a modular, asynchronous architecture:
+### System Architecture:
+
+<img width="1219" height="895" alt="image" src="https://github.com/user-attachments/assets/374b150d-aa48-4385-8a4a-f1c800e67e6d" />
 
 ### Core Components
 
@@ -173,17 +175,14 @@ BitBot follows a modular, asynchronous architecture:
 - **Pipeline**: Asyncio orchestration of STT → LLM → TTS
 - **Chat Interface**: Rich text-based interaction
 
-### Data Flow
+### Data Flow:
 
-```
-Audio Input → Wake Word Detection → STT → LLM → TTS → Audio Output
-     ↑                ↓                              ↓
-   Microphone    "Hey BitBot"                   Speakers
+<img width="1644" height="620" alt="image" src="https://github.com/user-attachments/assets/39d134a6-c494-4932-b392-8e212d79ad3b" />
 
-Text Input → LLM → Text Output
-     ↑              ↓
-  Chat CLI      Terminal
-```
+
+### Web Search:
+
+<img width="346" height="1224" alt="image" src="https://github.com/user-attachments/assets/57d75ba1-8bce-4757-a72e-6b51a117f7d6" />
 
 ## 🛠️ Development
 
@@ -225,7 +224,6 @@ See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for detailed progress trackin
 - **Faster Whisper**: High-performance STT inference
 - **Ollama**: Local LLM deployment platform
 - **pyttsx3**: Cross-platform text-to-speech (MVP)
-- **Picovoice Porcupine**: Accurate wake word detection
 - **sounddevice**: Cross-platform audio handling
 - **Rich**: Beautiful terminal interfaces
 
@@ -277,6 +275,7 @@ Check detailed documentation:
 - 🔧 Dependency resolution completion
 
 ### 📋 Coming Soon
+- Web search integration
 - Wake word detection integration
 - Speech-to-text processing
 - Text-to-speech synthesis
@@ -286,6 +285,7 @@ Check detailed documentation:
 ## 🔮 Roadmap
 
 ### Next Release (v0.1.0 - MVP)
+- [ ] Web search integration
 - [ ] Complete dependency installation
 - [ ] Model management system
 - [ ] End-to-end voice pipeline
